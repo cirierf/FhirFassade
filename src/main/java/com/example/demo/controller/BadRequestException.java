@@ -1,13 +1,16 @@
 package com.example.demo.controller;
 
-public class BadRequestException extends Exception {
-	private final String errorMessage;
+import java.util.ArrayList;
+import java.util.List;
 
-	public BadRequestException(String errorMessage) {
-		this.errorMessage = errorMessage;
+public class BadRequestException extends Exception {
+	private final List<String> errorMessages;
+
+	public BadRequestException(List<String> errorMessages) {
+		this.errorMessages = errorMessages;
 	}
 
-	public String getErrorMessage() {
-		return errorMessage;
+	public List<String> getErrorMessages() {
+		return errorMessages;
 	}
 }

@@ -24,6 +24,7 @@ class FhirControllerTest {
 
 	private static final String BEISPIEL_FHIR_RESSOURCE_PATIENT_JSON = "Beispiel-FHIR-Ressource-Patient";
 	private static final String BEISPIEL_FHIR_RESSOURCE_PATIENT_JSON_OHNE_NAMEN = "Beispiel-FHIR-Ressource-Patient-Ohne-Namen";
+	private static final String BEISPIEL_FHIR_RESSOURCE_PATIENT_JSON_OHNE_GEBURTSDATUM = "Beispiel-FHIR-Ressource-Patient-Ohne-Geburtsdatum";
 
 	private String getJsonString(String jsonFile) throws IOException {
 		Resource examplePatientJson = new ClassPathResource(jsonFile + ".json");
@@ -56,6 +57,14 @@ class FhirControllerTest {
 	@Test
 	void sentPatientWoNameShouldBeUnprocessableEntityErrored() throws Exception {
 		String patientJsonString = getJsonString(BEISPIEL_FHIR_RESSOURCE_PATIENT_JSON_OHNE_NAMEN);
+		when(proprietaryApiService.sendPatientData(anyString(), anyString(), anyString())).thenReturn(true);
+		this.mockMvc.perform(post("/Patient").content(patientJsonString).contentType(MediaType.APPLICATION_JSON))
+				.andDo(print()).andExpect(status().isUnprocessableEntity());
+	}
+
+	@Test
+	void sentPatientWoBirthdateShouldBeUnprocessableEntityErrored() throws Exception {
+		String patientJsonString = getJsonString(BEISPIEL_FHIR_RESSOURCE_PATIENT_JSON_OHNE_GEBURTSDATUM);
 		when(proprietaryApiService.sendPatientData(anyString(), anyString(), anyString())).thenReturn(true);
 		this.mockMvc.perform(post("/Patient").content(patientJsonString).contentType(MediaType.APPLICATION_JSON))
 				.andDo(print()).andExpect(status().isUnprocessableEntity());
