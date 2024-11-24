@@ -1,5 +1,6 @@
 package com.example.demo.controller;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -25,6 +26,9 @@ class FhirControllerTest {
 	private static final String BEISPIEL_FHIR_RESSOURCE_PATIENT_JSON = "Beispiel-FHIR-Ressource-Patient";
 	private static final String BEISPIEL_FHIR_RESSOURCE_PATIENT_JSON_OHNE_NAMEN = "Beispiel-FHIR-Ressource-Patient-Ohne-Namen";
 	private static final String BEISPIEL_FHIR_RESSOURCE_PATIENT_JSON_OHNE_GEBURTSDATUM = "Beispiel-FHIR-Ressource-Patient-Ohne-Geburtsdatum";
+	private static final String BEISPIEL_FHIR_RESSOURCE_DOCUMENT_REFERENCE = "Beispiel-FHIR-Ressource-DocumentReference";
+	private static final String BEISPIEL_FHIR_RESSOURCE_DOCUMENT_REFERENCE_WO_KDL = "Beispiel-FHIR-Ressource-DocumentReferenceOhneKdl";
+	private static final String BEISPIEL_FHIR_RESSOURCE_DOCUMENT_REFERENCE_WO_BILLING_NUMMER = "Beispiel-FHIR-Ressource-DocumentReferenceOhneAN";
 
 	private String getJsonString(String jsonFile) throws IOException {
 		Resource examplePatientJson = new ClassPathResource(jsonFile + ".json");
@@ -70,4 +74,36 @@ class FhirControllerTest {
 				.andDo(print()).andExpect(status().isUnprocessableEntity());
 	}
 
+	@Test
+	void sentDocumentToServiceShouldBeCreated() throws Exception {
+		String documentJsonString = getJsonString(BEISPIEL_FHIR_RESSOURCE_DOCUMENT_REFERENCE);
+		when(proprietaryApiService.sendDocumentData(anyString(), any(), any(), any(), any())).thenReturn(true);
+		this.mockMvc
+				.perform(post("/DocumentReference").content(documentJsonString).contentType(MediaType.APPLICATION_JSON))
+				.andDo(print()).andExpect(status().isCreated());
+	}
+
+	@Test
+	void serverErroredDocumentToServiceShouldBeServerErrored() throws Exception {
+		String documentJsonString = getJsonString(BEISPIEL_FHIR_RESSOURCE_DOCUMENT_REFERENCE);
+		when(proprietaryApiService.sendDocumentData(anyString(), any(), any(), any(), any())).thenReturn(false);
+		this.mockMvc.perform(post("/DocumentReference").content(documentJsonString).contentType(MediaType.APPLICATION_JSON))
+				.andDo(print()).andExpect(status().is5xxServerError());
+	}
+
+	@Test
+	void sentDocumentWoKdlShouldBeUnprocessableEntityErrored() throws Exception {
+		String patientJsonString = getJsonString(BEISPIEL_FHIR_RESSOURCE_DOCUMENT_REFERENCE_WO_KDL);
+		when(proprietaryApiService.sendPatientData(anyString(), anyString(), anyString())).thenReturn(true);
+		this.mockMvc.perform(post("/DocumentReference").content(patientJsonString).contentType(MediaType.APPLICATION_JSON))
+				.andDo(print()).andExpect(status().isUnprocessableEntity());
+	}
+
+	@Test
+	void sentDocumentWoBillingNumberShouldBeUnprocessableEntityErrored() throws Exception {
+		String patientJsonString = getJsonString(BEISPIEL_FHIR_RESSOURCE_DOCUMENT_REFERENCE_WO_BILLING_NUMMER);
+		when(proprietaryApiService.sendPatientData(anyString(), anyString(), anyString())).thenReturn(true);
+		this.mockMvc.perform(post("/DocumentReference").content(patientJsonString).contentType(MediaType.APPLICATION_JSON))
+				.andDo(print()).andExpect(status().isUnprocessableEntity());
+	}
 }
