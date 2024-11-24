@@ -1,12 +1,13 @@
 package com.example.demo.controller;
 
+import java.util.ArrayList;
 import java.util.Date;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.util.List;
 import java.util.stream.Collectors;
 
 import org.hl7.fhir.instance.model.api.IPrimitiveType;
 import org.hl7.fhir.r4.model.DocumentReference;
+import org.hl7.fhir.r4.model.HumanName;
 import org.hl7.fhir.r4.model.Identifier;
 import org.hl7.fhir.r4.model.Patient;
 import org.springframework.http.HttpStatus;
@@ -26,7 +27,6 @@ import ca.uhn.fhir.parser.IParser;
 public class FhirController {
 
 	private static final String DOCUMENT_REFERENCE = "DocumentReference";
-	private static final Logger logger = Logger.getLogger(FhirController.class.getName());
 	private final ProprietaryApiService proprietaryApiService;
 
 	public FhirController(ProprietaryApiService proprietaryApiService) {
@@ -37,46 +37,40 @@ public class FhirController {
 	private final FhirContext fhirContext = FhirContext.forR4();
 
 	@PostMapping("/Patient") // Mapped HTTP POST-Anfragen auf diesen Endpunkt
-	public ResponseEntity<String> createPatient(@RequestBody String patientResource) {
-		try {
-			// Loggt die erhaltene Anfrage
-			logger.info("Received request to create patient: " + patientResource);
+	public ResponseEntity<String> createPatient(@RequestBody String patientResource) throws BadRequestException {
+		// Erzeugt einen JSON-Parser für FHIR
+		IParser parser = fhirContext.newJsonParser();
+		// Parsen des Patient-Ressource-Strings in ein Patient-Objekt
+		Patient patient = parser.parseResource(Patient.class, patientResource);
+		List<String> issues = new ArrayList<>();
+		List<HumanName> name = patient.getName();
+		if (name.isEmpty()) {
+			issues.add("Missing patient name (Patient.name)");
+		}
+		// Extrahieren des Geburtsdatums aus der Patient-Ressource
+		String birthDate = patient.getBirthDateElement().getValueAsString();
+		if (birthDate == null) {
+			issues.add("Missing birthdate (Patient.birthdate)");
+		}
+		if (!issues.isEmpty()) {
+			throw new BadRequestException(issues);
+		}
 
-			// Erzeugt einen JSON-Parser für FHIR
-			IParser parser = fhirContext.newJsonParser();
-			// Parsen des Patient-Ressource-Strings in ein Patient-Objekt
-			Patient patient = parser.parseResource(Patient.class, patientResource);
+		// Extrahieren des Vornamens aus der Patient-Ressource
+		String firstName = name.get(0).getGiven().stream().map(IPrimitiveType::getValue)
+				.collect(Collectors.joining(" "));
+		// Extrahieren des Nachnamens aus der Patient-Ressource
+		String lastName = name.get(0).getFamily();
 
-			// Extrahieren des Vornamens aus der Patient-Ressource
-			String firstName = patient.getName().get(0).getGiven().stream().map(IPrimitiveType::getValue)
-					.collect(Collectors.joining(" "));
-			// Extrahieren des Nachnamens aus der Patient-Ressource
-			String lastName = patient.getName().get(0).getFamily();
-			// Extrahieren des Geburtsdatums aus der Patient-Ressource
-			String birthDate = patient.getBirthDateElement().getValueAsString();
+		// Konvertierung des Geburtsdatums in das gewünschte Format
+		birthDate = convertDate(birthDate);
 
-			// Konvertierung des Geburtsdatums in das gewünschte Format
-			birthDate = convertDate(birthDate);
+		// Sendet die Patientendaten an die proprietäre API
+		boolean apiSuccess = proprietaryApiService.sendPatientData(firstName, lastName, birthDate);
 
-			// Loggt die extrahierten und konvertierten Patientendaten
-			logger.info("Parsed patient data: " + firstName + " " + lastName + ", Birthdate: " + birthDate);
-
-			// Sendet die Patientendaten an die proprietäre API
-			boolean apiSuccess = proprietaryApiService.sendPatientData(firstName, lastName, birthDate);
-
-			if (apiSuccess) {
-				// Loggt und gibt eine Erfolgsantwort zurück, wenn die API-Anfrage erfolgreich
-				// war
-				logger.info("Patient data sent successfully.");
-				return ResponseEntity.status(HttpStatus.CREATED).body("Patient created successfully.");
-			} else {
-				// Loggt und gibt eine Fehlerantwort zurück, wenn die API-Anfrage fehlschlägt
-				logger.severe("Failed to send patient data to proprietary API.");
-				return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Internal Server Error.");
-			}
-		} catch (Exception e) {
-			// Loggt und gibt eine Fehlerantwort zurück, wenn eine Ausnahme auftritt
-			logger.log(Level.SEVERE, "Exception occurred while creating patient", e);
+		if (apiSuccess) {
+			return ResponseEntity.status(HttpStatus.CREATED).body("Patient created successfully.");
+		} else {
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Internal Server Error.");
 		}
 	}
@@ -87,9 +81,6 @@ public class FhirController {
 	@PostMapping("/" + DOCUMENT_REFERENCE)
 	public ResponseEntity<String> createDocumentReference(@RequestBody String documentReferenceResource) {
 		try {
-			// Loggt die erhaltene Anfrage
-			logger.info("Received request to create document reference: " + documentReferenceResource);
-
 			// Erzeugt einen JSON-Parser für FHIR
 			IParser parser = fhirContext.newJsonParser();
 			// Parsen des Patient-Ressource-Strings in ein Patient-Objekt
@@ -113,11 +104,6 @@ public class FhirController {
 			// Extrahieren der Dokument data
 			byte[] data = documentReference.getContent().get(0).getAttachment().getData();
 
-			// Loggt die extrahierten und konvertierten Patientendaten
-			logger.info("Parsed document data: KDL code: " + kdlCode + ", patienten Id: " + patientenId
-					+ ", abrechnungsfallNummer: " + abrechnungsfallNummer + ", creationDate: " + creationDate
-					+ ", data:" + data);
-
 			int patientenIdInt = Integer.parseInt(patientenId);
 			int abrechnungsfallNummerInt = Integer.parseInt(abrechnungsfallNummer);
 			// Sendet die Dokumentdaten an die proprietäre API
@@ -127,16 +113,13 @@ public class FhirController {
 			if (apiSuccess) {
 				// Loggt und gibt eine Erfolgsantwort zurück, wenn die API-Anfrage erfolgreich
 				// war
-				logger.info("document data sent successfully.");
 				return ResponseEntity.status(HttpStatus.CREATED).body("Document created successfully.");
 			} else {
 				// Loggt und gibt eine Fehlerantwort zurück, wenn die API-Anfrage fehlschlägt
-				logger.severe("Failed to send document data to proprietary API.");
 				return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Internal Server Error.");
 			}
 		} catch (Exception e) {
 			// Loggt und gibt eine Fehlerantwort zurück, wenn eine Ausnahme auftritt
-			logger.log(Level.SEVERE, "Exception occurred while creating document", e);
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Internal Server Error.");
 		}
 	}
@@ -144,6 +127,12 @@ public class FhirController {
 	private String convertDate(String birthDate) {
 		// Konvertierung des Geburtsdatums von YYYY-MM-DD zu DD.MM.YYYY
 		String[] parts = birthDate.split("-");
+		// Das Geburtsdatum kann mit YYYY oder YYYY-MM angegeben werden, in diesemFall
+		// wir verlieren die Info...
+		if (parts.length < 3) {
+			return null;
+		}
 		return parts[2] + "." + parts[1] + "." + parts[0];
+
 	}
 }
