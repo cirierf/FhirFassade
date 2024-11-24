@@ -29,7 +29,12 @@
             "assigner":
             {
                 "display": "Acme Healthcare"
-            }true
+            }
+        }
+    ],
+    "active": true,
+    "name":
+    [
         {
             "use": "official",
             "family": "Chalmers",
@@ -61,18 +66,37 @@
         }
     ],
     "telecom":
-    [true
+    [
         {
             "use": "home"
         },
         {
-            "system": "phone",true
+            "system": "phone",
+            "value": "(03) 5555 6473",
+            "use": "work",
+            "rank": 1
+        },
+        {
+            "system": "phone",
+            "value": "(03) 3410 5613",
+            "use": "mobile",
+            "rank": 2
+        },
+        {
             "system": "phone",
             "value": "(03) 5555 8834",
             "use": "old",
             "period":
             {
-                "end": "2014"true
+                "end": "2014"
+            }
+        }
+    ],
+    "gender": "male",
+    "birthDate": "1974-12-25",
+    "_birthDate":
+    {
+        "extension":
         [
             {
                 "url": "http://hl7.org/fhir/StructureDefinition/patient-birthTime",
@@ -86,7 +110,7 @@
         {
             "use": "home",
             "type": "both",
-            "text": "534 Erewhon St truePeasantVille, Rainbow, Vic  3999",
+            "text": "534 Erewhon St PeasantVille, Rainbow, Vic  3999",
             "line":
             [
                 "534 Erewhon St"
@@ -99,7 +123,7 @@
             {
                 "start": "1974-12-25"
             }
-        }true
+        }
     ],
     "contact":
     [
