@@ -1,12 +1,19 @@
 package com.example.demo.controller;
 
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 import org.hl7.fhir.instance.model.api.IPrimitiveType;
+import org.hl7.fhir.r4.model.HumanName;
+import org.hl7.fhir.r4.model.OperationOutcome;
+import org.hl7.fhir.r4.model.OperationOutcome.IssueSeverity;
+import org.hl7.fhir.r4.model.OperationOutcome.IssueType;
+import org.hl7.fhir.r4.model.OperationOutcome.OperationOutcomeIssueComponent;
 import org.hl7.fhir.r4.model.Patient;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -34,20 +41,24 @@ public class FhirController {
 
 	@PostMapping("/Patient") // Mapped HTTP POST-Anfragen auf diesen Endpunkt
 	public ResponseEntity<String> createPatient(@RequestBody String patientResource) {
+		// Loggt die erhaltene Anfrage
+		logger.info("Received request to create patient: " + patientResource);
+
+		// Erzeugt einen JSON-Parser für FHIR
+		IParser parser = fhirContext.newJsonParser();
+		// Parsen des Patient-Ressource-Strings in ein Patient-Objekt
+		Patient patient = parser.parseResource(Patient.class, patientResource);
 		try {
-			// Loggt die erhaltene Anfrage
-			logger.info("Received request to create patient: " + patientResource);
 
-			// Erzeugt einen JSON-Parser für FHIR
-			IParser parser = fhirContext.newJsonParser();
-			// Parsen des Patient-Ressource-Strings in ein Patient-Objekt
-			Patient patient = parser.parseResource(Patient.class, patientResource);
-
+			List<HumanName> name = patient.getName();
+			if (name.isEmpty()) {
+				throw new BadRequestException("Missing patient name");
+			}
 			// Extrahieren des Vornamens aus der Patient-Ressource
-			String firstName = patient.getName().get(0).getGiven().stream().map(IPrimitiveType::getValue)
+			String firstName = name.get(0).getGiven().stream().map(IPrimitiveType::getValue)
 					.collect(Collectors.joining(" "));
 			// Extrahieren des Nachnamens aus der Patient-Ressource
-			String lastName = patient.getName().get(0).getFamily();
+			String lastName = name.get(0).getFamily();
 			// Extrahieren des Geburtsdatums aus der Patient-Ressource
 			String birthDate = patient.getBirthDateElement().getValueAsString();
 
@@ -70,11 +81,30 @@ public class FhirController {
 				logger.severe("Failed to send patient data to proprietary API.");
 				return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Internal Server Error.");
 			}
+		} catch (BadRequestException e) {
+			// Loggt und gibt eine Fehlerantwort zurück, wenn eine Ausnahme auftritt
+			logger.log(Level.SEVERE, "Exception occurred while creating document", e);
+			OperationOutcome operationOutcome = createOperationOutcome(e.getErrorMessage());
+
+			return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).contentType(MediaType.APPLICATION_JSON)
+					.body(parser.encodeResourceToString(operationOutcome));
 		} catch (Exception e) {
 			// Loggt und gibt eine Fehlerantwort zurück, wenn eine Ausnahme auftritt
 			logger.log(Level.SEVERE, "Exception occurred while creating patient", e);
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Internal Server Error.");
 		}
+	}
+
+	private OperationOutcome createOperationOutcome(String errorMessage) {
+		OperationOutcome operationOutcome = new OperationOutcome();
+		OperationOutcomeIssueComponent issue = new OperationOutcomeIssueComponent();
+		IssueSeverity severity = IssueSeverity.FATAL;
+		issue.setSeverity(severity);
+		IssueType code = IssueType.REQUIRED;
+		issue.setCode(code);
+		issue.setDiagnostics(errorMessage);
+		operationOutcome.addIssue(issue);
+		return operationOutcome;
 	}
 
 	private String convertDate(String birthDate) {

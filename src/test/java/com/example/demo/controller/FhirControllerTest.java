@@ -22,8 +22,11 @@ import com.example.demo.service.ProprietaryApiService;
 @WebMvcTest(FhirController.class)
 class FhirControllerTest {
 
-	private String getPatientJsonString() throws IOException {
-		Resource examplePatientJson = new ClassPathResource("Beispiel-FHIR-Ressource-Patient.json");
+	private static final String BEISPIEL_FHIR_RESSOURCE_PATIENT_JSON = "Beispiel-FHIR-Ressource-Patient";
+	private static final String BEISPIEL_FHIR_RESSOURCE_PATIENT_JSON_OHNE_NAMEN = "Beispiel-FHIR-Ressource-Patient-Ohne-Namen";
+
+	private String getJsonString(String jsonFile) throws IOException {
+		Resource examplePatientJson = new ClassPathResource(jsonFile + ".json");
 		byte[] allBytes = examplePatientJson.getInputStream().readAllBytes();
 		return new String(allBytes);
 	}
@@ -36,7 +39,7 @@ class FhirControllerTest {
 
 	@Test
 	void sentPatientToServiceShouldBeCreated() throws Exception {
-		String patientJsonString = getPatientJsonString();
+		String patientJsonString = getJsonString(BEISPIEL_FHIR_RESSOURCE_PATIENT_JSON);
 		when(proprietaryApiService.sendPatientData(anyString(), anyString(), anyString())).thenReturn(true);
 		this.mockMvc.perform(post("/Patient").content(patientJsonString).contentType(MediaType.APPLICATION_JSON))
 				.andDo(print()).andExpect(status().isCreated());
@@ -44,10 +47,18 @@ class FhirControllerTest {
 
 	@Test
 	void serverErroredPatientToServiceShouldBeServerErrored() throws Exception {
-		String patientJsonString = getPatientJsonString();
+		String patientJsonString = getJsonString(BEISPIEL_FHIR_RESSOURCE_PATIENT_JSON);
 		when(proprietaryApiService.sendPatientData(anyString(), anyString(), anyString())).thenReturn(false);
 		this.mockMvc.perform(post("/Patient").content(patientJsonString).contentType(MediaType.APPLICATION_JSON))
 				.andDo(print()).andExpect(status().is5xxServerError());
+	}
+
+	@Test
+	void sentPatientWoNameShouldBeUnprocessableEntityErrored() throws Exception {
+		String patientJsonString = getJsonString(BEISPIEL_FHIR_RESSOURCE_PATIENT_JSON_OHNE_NAMEN);
+		when(proprietaryApiService.sendPatientData(anyString(), anyString(), anyString())).thenReturn(true);
+		this.mockMvc.perform(post("/Patient").content(patientJsonString).contentType(MediaType.APPLICATION_JSON))
+				.andDo(print()).andExpect(status().isUnprocessableEntity());
 	}
 
 }
