@@ -6,6 +6,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 @SpringBootTest
 class DemoApplicationTests {
 
+	/**
+	 * Tests the loading of spring context.
+	 */
 	@Test
 	void contextLoads() {
 	}
