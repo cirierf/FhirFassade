@@ -3,13 +3,16 @@ package com.example.demo.controller;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.hl7.fhir.instance.model.api.IPrimitiveType;
+import org.hl7.fhir.r4.model.Coding;
 import org.hl7.fhir.r4.model.DocumentReference;
 import org.hl7.fhir.r4.model.HumanName;
 import org.hl7.fhir.r4.model.Identifier;
 import org.hl7.fhir.r4.model.Patient;
+import org.hl7.fhir.r4.model.Reference;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -52,6 +55,8 @@ public class FhirController {
 		if (birthDate == null) {
 			issues.add("Missing birthdate (Patient.birthdate)");
 		}
+		// Falls Fehler aufgetreten sind, sammeln wir alle Fehlermeldungen in die
+		// Ausnahme
 		if (!issues.isEmpty()) {
 			throw new BadRequestException(issues);
 		}
@@ -79,49 +84,63 @@ public class FhirController {
 	public static final String ABRECHNUNGSNUMMER = "AN";
 
 	@PostMapping("/" + DOCUMENT_REFERENCE)
-	public ResponseEntity<String> createDocumentReference(@RequestBody String documentReferenceResource) {
-		try {
-			// Erzeugt einen JSON-Parser für FHIR
-			IParser parser = fhirContext.newJsonParser();
-			// Parsen des Patient-Ressource-Strings in ein Patient-Objekt
-			DocumentReference documentReference = parser.parseResource(DocumentReference.class,
-					documentReferenceResource);
+	public ResponseEntity<String> createDocumentReference(@RequestBody String documentReferenceResource)
+			throws BadRequestException {
+		// Erzeugt einen JSON-Parser für FHIR
+		IParser parser = fhirContext.newJsonParser();
+		// Parsen des Patient-Ressource-Strings in ein Patient-Objekt
+		DocumentReference documentReference = parser.parseResource(DocumentReference.class, documentReferenceResource);
+		List<String> issues = new ArrayList<>();
 
-			// Extrahieren des KDL-Code aus der DocumentReference-Ressource
-			String kdlCode = documentReference.getType().getCoding().stream()
-					.filter(coding -> KDL_SYSTEM.equals(coding.getSystem())).findFirst().get().getCode();
-			// Extrahieren des Patienten-ID aus der DocumentReference-Ressource
-			String patientenId = documentReference.getSubject().getIdentifier().getValue();
-			// Extrahieren des Abrechnungsfall-Nummer aus der DocumentReference-Ressource
-			String abrechnungsfallNummer = documentReference.getContext().getEncounter().stream().filter(reference -> {
-				if (reference.getIdentifier() == null)
-					return false;
-				Identifier identifier = reference.getIdentifier();
-				return ABRECHNUNGSNUMMER.equals(identifier.getType().getCoding().get(0).getCode());
-			}).findFirst().get().getIdentifier().getValue();
-			// Extrahieren des Erstelldatum aus der DocumentReference-Ressource
-			Date creationDate = documentReference.getContent().get(0).getAttachment().getCreation();
-			// Extrahieren der Dokument data
-			byte[] data = documentReference.getContent().get(0).getAttachment().getData();
+		// Extrahieren des KDL-Code aus der DocumentReference-Ressource
+		Optional<Coding> maybeKdlCoding = documentReference.getType().getCoding().stream()
+				.filter(coding -> KDL_SYSTEM.equals(coding.getSystem())).findFirst();
+		if (!maybeKdlCoding.isPresent()) {
+			issues.add("Missing document type from KDL terminology (DocumentReference.type.coding:KDL)");
+		}
 
-			int patientenIdInt = Integer.parseInt(patientenId);
-			int abrechnungsfallNummerInt = Integer.parseInt(abrechnungsfallNummer);
-			// Sendet die Dokumentdaten an die proprietäre API
-			boolean apiSuccess = proprietaryApiService.sendDocumentData(kdlCode, patientenIdInt,
-					abrechnungsfallNummerInt, creationDate, data);
+		Optional<Reference> maybeBillingNumber = documentReference.getContext().getEncounter().stream()
+				.filter(reference -> {
+					if (reference.getIdentifier() == null)
+						return false;
+					Identifier identifier = reference.getIdentifier();
+					return ABRECHNUNGSNUMMER.equals(identifier.getType().getCoding().get(0).getCode());
+				}).findFirst();
+		if (!maybeBillingNumber.isPresent()) {
+			issues.add(
+					"Missing billing number (DocumentReference.context.encounter.identifier:Abrechnungsnummer.type.coding:AN)");
+		}
+		// Falls Fehler aufgetreten sind, sammeln wir alle Fehlermeldungen in die
+		// Ausnahme
+		if (!issues.isEmpty()) {
+			throw new BadRequestException(issues);
+		}
 
-			if (apiSuccess) {
-				// Loggt und gibt eine Erfolgsantwort zurück, wenn die API-Anfrage erfolgreich
-				// war
-				return ResponseEntity.status(HttpStatus.CREATED).body("Document created successfully.");
-			} else {
-				// Loggt und gibt eine Fehlerantwort zurück, wenn die API-Anfrage fehlschlägt
-				return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Internal Server Error.");
-			}
-		} catch (Exception e) {
-			// Loggt und gibt eine Fehlerantwort zurück, wenn eine Ausnahme auftritt
+		String kdlCode = maybeKdlCoding.get().getCode();
+		// Extrahieren des Patienten-ID aus der DocumentReference-Ressource
+		String patientenId = documentReference.getSubject().getIdentifier().getValue();
+		// Extrahieren des Abrechnungsfall-Nummer aus der DocumentReference-Ressource
+		String abrechnungsfallNummer = maybeBillingNumber.get().getIdentifier().getValue();
+		// Extrahieren des Erstelldatum aus der DocumentReference-Ressource
+		Date creationDate = documentReference.getContent().get(0).getAttachment().getCreation();
+		// Extrahieren der Dokument data
+		byte[] data = documentReference.getContent().get(0).getAttachment().getData();
+
+		int patientenIdInt = Integer.parseInt(patientenId);
+		int abrechnungsfallNummerInt = Integer.parseInt(abrechnungsfallNummer);
+		// Sendet die Dokumentdaten an die proprietäre API
+		boolean apiSuccess = proprietaryApiService.sendDocumentData(kdlCode, patientenIdInt, abrechnungsfallNummerInt,
+				creationDate, data);
+
+		if (apiSuccess) {
+			// Loggt und gibt eine Erfolgsantwort zurück, wenn die API-Anfrage erfolgreich
+			// war
+			return ResponseEntity.status(HttpStatus.CREATED).body("Document created successfully.");
+		} else {
+			// Loggt und gibt eine Fehlerantwort zurück, wenn die API-Anfrage fehlschlägt
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Internal Server Error.");
 		}
+
 	}
 
 	private String convertDate(String birthDate) {
