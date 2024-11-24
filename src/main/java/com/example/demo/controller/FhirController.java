@@ -106,7 +106,7 @@ public class FhirController {
 				if (reference.getIdentifier() == null)
 					return false;
 				Identifier identifier = reference.getIdentifier();
-				return ABRECHNUNGSNUMMER.equals(identifier.getSystem());
+				return ABRECHNUNGSNUMMER.equals(identifier.getType().getCoding().get(0).getCode());
 			}).findFirst().get().getIdentifier().getValue();
 			// Extrahieren des Erstelldatum aus der DocumentReference-Ressource
 			Date creationDate = documentReference.getContent().get(0).getAttachment().getCreation();
