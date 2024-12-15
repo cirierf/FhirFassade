@@ -2,6 +2,7 @@ package com.example.demo.controller;
 
 import java.util.List;
 
+@SuppressWarnings("serial")
 public class BadRequestException extends Exception {
 	private final List<String> errorMessages;
 
